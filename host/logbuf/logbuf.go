@@ -138,11 +138,13 @@ func (l *Log) Read(lines int, follow bool, ch chan Data, done chan struct{}) err
 			}
 			block--
 		}
-	} else if lines == -1 {
+	} else if lines == 0 {
 		seek, err = f.Seek(0, os.SEEK_END)
 		if err != nil {
 			return err
 		}
+	} else if lines == -1 {
+		// return all lines
 	}
 
 	t, err := tail.TailFile(name, tail.Config{

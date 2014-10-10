@@ -27,7 +27,7 @@ func (s *S) TestLogWriteRead(c *C) {
 	l := NewLog(&lumberjack.Logger{})
 	defer l.Close()
 	ch := make(chan Data)
-	err := l.Read(0, false, ch, nil)
+	err := l.Read(-1, false, ch, nil)
 	c.Assert(err, IsNil)
 	c.Assert(len(ch), Equals, 0)
 
@@ -53,7 +53,7 @@ func (s *S) TestLogWriteRead(c *C) {
 	}()
 	wg.Wait()
 	ch = make(chan Data)
-	go l.Read(0, false, ch, nil)
+	go l.Read(-1, false, ch, nil)
 	c.Assert(err, IsNil)
 
 	stdout, stderr := 0, 2
@@ -159,7 +159,7 @@ func (s *S) TestLogReadNLines(c *C) {
 	c.Assert(num, Equals, 4)
 	// read all logs
 	ch = make(chan Data)
-	go l.Read(0, false, ch, nil)
+	go l.Read(-1, false, ch, nil)
 	num = countResponses(ch)
 	c.Assert(num, Equals, 4)
 }
@@ -171,7 +171,7 @@ func (s *S) TestStreaming(c *C) {
 
 	ch := make(chan Data)
 	done := make(chan struct{})
-	go l.Read(0, true, ch, done)
+	go l.Read(-1, true, ch, done)
 
 	for i := 0; i < 3; i++ {
 		s := strconv.Itoa(i)
