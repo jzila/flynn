@@ -1,7 +1,9 @@
 {
   "variables": {
     "flynn_deb_url": "",
-    "headless": "false"
+    "headless": "false",
+    "output_dir": ".",
+    "version": ""
   },
   "builders": [
     {
@@ -102,5 +104,10 @@
       "type": "shell"
     }
   ],
-  "post-processors": [{ "type": "vagrant" }]
+  "post-processors": [
+    {
+      "type": "vagrant",
+      "output": "{{ user `output_dir` }}/flynn-base_{{ user `version` }}_{{ .Provider }}.box"
+    }
+  ]
 }

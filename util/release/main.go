@@ -12,12 +12,14 @@ Usage:
   flynn-release manifest [--output=<dest>] [--id-file=<file>] <template>
   flynn-release download [--driver=<name>] [--root=<path>] <manifest>
   flynn-release upload <manifest> [<tag>]
+  flynn-release vagrant [--bucket=<bucket>]
 
 Options:
   -o --output=<dest>   output destination file ("-" for stdout) [default: -]
   -i --id-file=<file>  JSON file containing ID mappings
   -d --driver=<name>   image storage driver [default: aufs]
   -r --root=<path>     image storage root [default: /var/lib/docker]
+  -b --bucket=<bucket> S3 bucket containing vagrant manifest [default: flynn]
 `
 	args, _ := docopt.Parse(usage, nil, true, "", false)
 
@@ -30,5 +32,7 @@ Options:
 		download(args)
 	case args.Bool["upload"]:
 		upload(args)
+	case args.Bool["vagrant"]:
+		vagrant(args)
 	}
 }

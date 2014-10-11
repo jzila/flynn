@@ -1,0 +1,122 @@
+#!/bin/bash
+#
+# A script to build and release Flynn VM images.
+#
+# PREREQUISITES:
+#
+# - Install packer
+#   sudo apt-get install -y unzip
+#   wget -O /tmp/packer.zip https://dl.bintray.com/mitchellh/packer/packer_0.7.1_linux_amd64.zip
+#   sudo unzip -d /usr/local/bin /tmp/packer.zip
+#   rm /tmp/packer.zip
+#
+# - Install up-to-date s3cmd so "s3cmd info" works
+#   sudo apt-get install -y python-dateutil
+#   wget -O /tmp/s3cmd.deb http://archive.ubuntu.com/ubuntu/pool/universe/s/s3cmd/s3cmd_1.5.0~rc1-2_all.deb
+#   sudo dpkg -i /tmp/s3cmd.deb
+#   rm /tmp/s3cmd.deb
+
+set -e
+
+usage() {
+  cat <<USAGE >&2
+usage: $0 [options] VERSION DEB_URL
+
+OPTIONS:
+  -h            Show this message
+  -b BUCKET     The S3 bucket to upload vagrant images to [default: flynn]
+  -r DIR        Resume the release using DIR
+
+NOTE: Requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to be set
+USAGE
+}
+
+main() {
+  local bucket dir
+
+  local root="$(cd "$(dirname "$0")/.." && pwd)"
+  source "${root}/script/lib/ui.sh"
+
+  while getopts "hb:r:" opt; do
+    case $opt in
+      h)
+	usage
+	exit 1
+	;;
+      b)
+	bucket=$OPTARG
+	;;
+      r)
+        dir=$OPTARG
+        if [[ ! -d "${dir}" ]]; then
+          fail "No such directory: ${dir}"
+        fi
+        ;;
+      ?)
+	usage
+	exit 1
+	;;
+    esac
+  done
+  shift $(($OPTIND - 1))
+
+  if [[ $# -ne 2 ]]; then
+    usage
+    exit 1
+  fi
+
+  if [[ -z "${AWS_ACCESS_KEY_ID}" ]] || [[ -z "${AWS_SECRET_ACCESS_KEY}" ]]; then
+    fail "missing AWS_ACCESS_KEY_ID and/or AWS_SECRET_ACCESS_KEY"
+  fi
+
+  local version=$1
+  local deb_url=$2
+  bucket=${bucket:-"flynn"}
+  dir="${dir:-$(mktemp -d)}"
+
+  info "using base dir: ${dir}"
+
+  local box=$(ls "${dir}"/*_virtualbox.box 2>/dev/null)
+  if [[ -z "${box}" ]]; then
+    info "building virtualbox image"
+    pushd "${root}/util/packer/ubuntu-14.04" >/dev/null
+    packer build \
+      -only=virtualbox-iso \
+      -var "flynn_deb_url=${deb_url}" \
+      -var "headless=true" \
+      -var "output_dir=${dir}" \
+      -var "version=${version}" \
+      vagrant.json
+    popd >/dev/null
+
+    box=$(ls "${dir}"/*_virtualbox.box 2>/dev/null)
+  fi
+
+  local box_name="$(basename "${box}")"
+  if ! s3cmd info "s3://${bucket}/vagrant/boxes/${box_name}" &>/dev/null; then
+    info "calculating SHA256 checksum of ${box_name}"
+    checksum=$(sha256sum "${box}" | cut -d ' ' -f 1)
+    if [[ ${#checksum} -ne 64 ]]; then
+      fail "invalid checksum generated: '${checksum}'"
+    fi
+    info "checksum is ${checksum}"
+
+    info "uploading ${box_name} to s3://${bucket}/vagrant/boxes"
+    s3cmd put \
+      --add-header "x-amz-meta-sha256:${checksum}" \
+      --add-header "x-amz-meta-flynn-version:${version}" \
+      --add-header "x-amz-meta-provider:virtualbox" \
+      "${box}" \
+      "s3://${bucket}/vagrant/boxes/"
+  fi
+
+  info "releasing vagrant images"
+  "${root}/util/release/flynn-release" vagrant --bucket "${bucket}"
+
+  info "cleaning up"
+  rm -rf "${dir}"
+
+  info "done!"
+}
+
+main $@
